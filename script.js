@@ -8,6 +8,107 @@ const IS_TOUCH = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
 const IS_MOBILE = window.innerWidth < 768 || IS_TOUCH;
 const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+/* ═══════════════════════════════════════════════════════════
+   SOUND SYSTEM — Simple & Reliable
+   ─ Among Us  : plays once when PRAGYOTSAV_2K26.exe appears
+   ─ ST Theme  : loops from that same moment, forever
+   ─ Button    : mute / unmute ST theme only
+   ─ Browser autoplay: audio context resumed on first interaction
+═══════════════════════════════════════════════════════════ */
+(function initSound() {
+    const btn    = document.getElementById('sound-btn');
+    const onIco  = document.getElementById('sound-on-icon');
+    const offIco = document.getElementById('sound-off-icon');
+    if (!btn) return;
+
+    const stTheme = new Audio('Stranger_Things.mp3');
+    stTheme.loop    = true;
+    stTheme.volume  = 0.45;
+    stTheme.preload = 'auto';
+
+    const amongUs = new Audio('Among us loading.mp3');
+    amongUs.loop    = false;
+    amongUs.volume  = 0.75;
+    amongUs.preload = 'auto';
+
+    // isMuted = false means sound is ON (user hasn't muted)
+    let isMuted      = false;
+    // Has the glitch screen fired yet?
+    let glitchFired  = false;
+
+    /* updateBtn — keeps icon in sync with isMuted state */
+    function updateBtn() {
+        if (isMuted) {
+            btn.classList.remove('playing');
+            onIco.style.display  = '';     // show speaker icon  (sound OFF)
+            offIco.style.display = 'none';
+        } else {
+            btn.classList.add('playing');
+            onIco.style.display  = 'none';
+            offIco.style.display = '';     // show muted icon (sound ON, click to mute)
+        }
+    }
+
+    /* ── playGlitchSound ──────────────────────────────────────
+       Called exactly once when PRAGYOTSAV_2K26.exe screen starts.
+       Tries to play immediately. If browser blocks it (autoplay
+       policy), it sets up a one-time gesture listener to retry.   */
+    window.playGlitchSound = function() {
+        if (glitchFired) return;
+        glitchFired = true;
+
+        function fireAudio() {
+    setTimeout(() => {
+        amongUs.currentTime = 0;
+        amongUs.play().catch(() => {});
+    }, 1000);  // ← change this number
+
+            // ST Theme starts looping — unless user already muted
+            if (!isMuted) {
+                stTheme.currentTime = 0;
+                stTheme.play().catch(() => {});
+            }
+        }
+
+        // Try immediately
+        const tryPlay = stTheme.play();
+        if (tryPlay !== undefined) {
+            tryPlay.then(() => {
+                // Autoplay allowed — also fire Among Us
+                stTheme.pause();
+                stTheme.currentTime = 0;
+                fireAudio();
+            }).catch(() => {
+                // Autoplay blocked — wait for first user gesture
+                function onFirstGesture() {
+                    document.removeEventListener('click',      onFirstGesture, true);
+                    document.removeEventListener('touchstart', onFirstGesture, true);
+                    fireAudio();
+                }
+                document.addEventListener('click',      onFirstGesture, { once: true, capture: true });
+                document.addEventListener('touchstart', onFirstGesture, { once: true, capture: true, passive: true });
+            });
+        } else {
+            fireAudio();
+        }
+    };
+
+    /* ── Sound button: mute / unmute ST theme only ── */
+    btn.addEventListener('click', () => {
+        isMuted = !isMuted;
+        if (isMuted) {
+            stTheme.pause();
+        } else {
+            stTheme.play().catch(() => {});
+        }
+        updateBtn();
+    });
+
+    // Start in unmuted visual state
+    updateBtn();
+})();
+
+
 /* ═══════════════════════════════════════
    PIN DATA (Hawkins Map)
 ═══════════════════════════════════════ */
@@ -17,16 +118,19 @@ const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
    1. GLITCH INTRO
 ═══════════════════════════════════════ */
 (function glitchIntro() {
-    // Delay until "You Have Been Chosen" screen finishes (~5.4s total)
-    const CHOSEN_DURATION = 5400;
-
     const overlay = document.getElementById('glitch-overlay');
     const gc = document.getElementById('glitch-canvas');
     if (!gc) return;
 
-    // Hide glitch overlay until chosen screen is done
-    overlay.style.display = 'none';
-    setTimeout(() => { overlay.style.display = ''; }, CHOSEN_DURATION);
+    // Hide glitch overlay — will be shown instantly when shatter fires
+    overlay.style.visibility = 'hidden';
+    overlay.style.display    = '';   // keep in DOM so it's ready
+
+    // Exposed so shatter screen can call directly — no poll, no gap
+    window.startGlitchNow = function() {
+        overlay.style.visibility = 'visible';
+        startGlitch();
+    };
 
     const gctx = gc.getContext('2d');
     const gl1 = document.getElementById('gl1');
@@ -68,8 +172,7 @@ const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
         if (frame % 8 === 0) gl1.classList.toggle('gl-glitch');
         requestAnimationFrame(draw);
     }
-    // Start glitch after chosen screen (5.4s) + run for 2.2s
-    setTimeout(() => {
+    function startGlitch() {
         draw();
         const dur = IS_MOBILE ? 2000 : 2400;
         setTimeout(() => {
@@ -79,7 +182,7 @@ const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
             setTimeout(() => { overlay.remove(); }, 600);
             startMorseTypewriter();
         }, dur);
-    }, 5400);
+    }
 })();
 
 /* ═══════════════════════════════════════
@@ -546,60 +649,7 @@ if (!IS_TOUCH) {
 /* ═══════════════════════════════════════
    8. AMBIENT SOUND
 ═══════════════════════════════════════ */
-(function initSound() {
-    const btn=document.getElementById('sound-btn');
-    const onIco=document.getElementById('sound-on-icon');
-    const offIco=document.getElementById('sound-off-icon');
-    let actx=null, playing=false;
 
-    function buildAudio(){
-        actx=new (window.AudioContext||window.webkitAudioContext)();
-        const master=actx.createGain();
-        master.gain.setValueAtTime(.001,actx.currentTime);
-        master.gain.linearRampToValueAtTime(.2,actx.currentTime+2);
-        master.connect(actx.destination);
-        [55,110,82.4].forEach(freq=>{
-            const o=actx.createOscillator(),g=actx.createGain();
-            o.type='sawtooth'; o.frequency.value=freq; g.gain.value=.07;
-            o.connect(g); g.connect(master); o.start();
-            const lfo=actx.createOscillator(),lg=actx.createGain();
-            lfo.frequency.value=.3; lg.gain.value=.4;
-            lfo.connect(lg); lg.connect(o.frequency); lfo.start();
-        });
-        const bufSz=actx.sampleRate*2,buf=actx.createBuffer(1,bufSz,actx.sampleRate);
-        const dat=buf.getChannelData(0); for(let i=0;i<bufSz;i++) dat[i]=Math.random()*2-1;
-        const w=actx.createBufferSource(); w.buffer=buf; w.loop=true;
-        const wf=actx.createBiquadFilter(); wf.type='bandpass'; wf.frequency.value=380; wf.Q.value=.45;
-        const wg=actx.createGain(); wg.gain.value=.055;
-        w.connect(wf); wf.connect(wg); wg.connect(master); w.start();
-        const h=actx.createOscillator(),hg=actx.createGain();
-        h.type='square'; h.frequency.value=60; hg.gain.value=.012;
-        h.connect(hg); hg.connect(master); h.start();
-    }
-
-    btn.addEventListener('click',()=>{
-        if(!playing){
-            if(!actx) buildAudio(); else actx.resume();
-            playing=true; btn.classList.add('playing');
-            onIco.style.display='none'; offIco.style.display='';
-        } else {
-            actx.suspend(); playing=false; btn.classList.remove('playing');
-            onIco.style.display=''; offIco.style.display='none';
-        }
-    });
-
-    document.querySelectorAll('.event-card').forEach(c=>{
-        c.addEventListener(IS_TOUCH?'touchstart':'mouseenter',()=>{
-            if(!playing||!actx) return;
-            const o=actx.createOscillator(),g=actx.createGain();
-            o.type='square'; o.frequency.setValueAtTime(700,actx.currentTime);
-            o.frequency.exponentialRampToValueAtTime(180,actx.currentTime+.08);
-            g.gain.setValueAtTime(.035,actx.currentTime);
-            g.gain.exponentialRampToValueAtTime(.001,actx.currentTime+.08);
-            o.connect(g); g.connect(actx.destination); o.start(); o.stop(actx.currentTime+.08);
-        },{passive:true});
-    });
-})();
 
 /* ═══════════════════════════════════════
    9. MOBILE MENU (Demogorgon mouth)
@@ -718,83 +768,205 @@ function flickIn(el){
 }
 
 /* ═══════════════════════════════════════════════════════════
-   IDEA B — "YOU HAVE BEEN CHOSEN" CINEMATIC ENTRANCE
-   Runs FIRST before the glitch intro
+   IDEA E — TAP TO SHATTER ENTRANCE
+   Black screen with pulsing "TAP TO ENTER THE UPSIDE DOWN"
+   On tap/click → shatter fragments burst from touch point
+   → white flash → fade out → glitch intro fires
 ═══════════════════════════════════════════════════════════ */
 (function chosenEntrance() {
     const screen = document.getElementById('chosen-screen');
-    const cc     = document.getElementById('chosen-canvas');
-    const cl1    = document.getElementById('cl1');
-    const cl2    = document.getElementById('cl2');
-    const cl3    = document.getElementById('cl3');
-    if (!screen || !cc) return;
+    const cc     = document.getElementById('chosen-canvas');    // bg noise
+    const sc     = document.getElementById('shatter-canvas');   // shatter fragments
+    if (!screen || !cc || !sc) return;
 
-    // Resize canvas
-    cc.width  = window.innerWidth;
-    cc.height = window.innerHeight;
-    const ctx = cc.getContext('2d');
+    let shattered = false;
 
-    // Animated scanlines + flicker on canvas
-    let frame = 0;
+    // Resize both canvases
+    function resize() {
+        cc.width = sc.width = window.innerWidth;
+        cc.height = sc.height = window.innerHeight;
+    }
+    resize();
+    window.addEventListener('resize', resize, { passive: true });
+
+    // ── BG: animated scanlines + subtle red glitch bars ──
+    const bgCtx = cc.getContext('2d');
+    let bgFrame = 0;
     function drawBG() {
-        if (!screen.parentNode) return;
-        frame++;
-        ctx.fillStyle = `rgba(0,0,0,${0.85 + Math.random()*.1})`;
-        ctx.fillRect(0, 0, cc.width, cc.height);
-        // horizontal glitch bars
-        for (let i = 0; i < 4; i++) {
-            if (Math.random() > 0.7) {
-                ctx.fillStyle = `rgba(${150+Math.random()*60},0,0,${Math.random()*.12})`;
-                ctx.fillRect(0, Math.random()*cc.height, cc.width, Math.random()*3+1);
+        if (!screen.parentNode || shattered) return;
+        bgFrame++;
+        bgCtx.fillStyle = `rgba(0,0,0,${0.88 + Math.random()*.08})`;
+        bgCtx.fillRect(0, 0, cc.width, cc.height);
+        // red glitch bars
+        for (let i = 0; i < 3; i++) {
+            if (Math.random() > 0.78) {
+                bgCtx.fillStyle = `rgba(${140+Math.random()*60},0,0,${Math.random()*.1})`;
+                bgCtx.fillRect(0, Math.random()*cc.height, cc.width, Math.random()*2+1);
             }
         }
         // scan lines
-        for (let y = 0; y < cc.height; y += 3) {
-            ctx.fillStyle = 'rgba(0,0,0,0.08)';
-            ctx.fillRect(0, y, cc.width, 1);
+        for (let y = 0; y < cc.height; y += 4) {
+            bgCtx.fillStyle = 'rgba(0,0,0,0.07)';
+            bgCtx.fillRect(0, y, cc.width, 1);
         }
         requestAnimationFrame(drawBG);
     }
     drawBG();
 
-    // Typewriter helper
-    function typeText(el, text, speed, cb) {
-        let i = 0;
-        el.textContent = '';
-        const t = setInterval(() => {
-            el.textContent += text[i++];
-            if (i >= text.length) { clearInterval(t); if (cb) cb(); }
-        }, speed);
+    // ── SHATTER: generate polygon fragments from tap point ──
+    function doShatter(tapX, tapY) {
+        if (shattered) return;
+        shattered = true;
+
+        // Trigger audio unlock + sounds
+        document.dispatchEvent(new MouseEvent('click'));
+        if (window.playGlitchSound) window.playGlitchSound();
+
+        // Haptic on mobile
+        if (navigator.vibrate) navigator.vibrate([40, 30, 80]);
+
+        const sCtx = sc.getContext('2d');
+        const W = sc.width, H = sc.height;
+
+        // Generate ~28 irregular polygon fragments
+        const COUNT  = IS_MOBILE ? 20 : 28;
+        const points = [[tapX, tapY]]; // seed from tap
+        // Add random points around screen
+        for (let i = 0; i < COUNT; i++) {
+            points.push([
+                Math.random() * W,
+                Math.random() * H
+            ]);
+        }
+        // Always include corners
+        points.push([0,0],[W,0],[W,H],[0,H],[tapX,0],[tapX,H],[0,tapY],[W,tapY]);
+
+        // Simple Delaunay-like triangulation: connect tap to random pairs
+        const fragments = [];
+        for (let i = 1; i < points.length - 1; i++) {
+            const p1 = points[i];
+            const p2 = points[(i + 1) % (points.length - 1) + 1] || points[1];
+            fragments.push({
+                verts: [
+                    [tapX, tapY],
+                    p1,
+                    p2
+                ],
+                // velocity — fly away from tap point
+                vx: (p1[0] + p2[0]) / 2 - tapX,
+                vy: (p1[1] + p2[1]) / 2 - tapY,
+                rot: (Math.random() - 0.5) * 0.25,
+                alpha: 1,
+                tx: 0, ty: 0, angle: 0
+            });
+        }
+
+        // Normalize velocities
+        fragments.forEach(f => {
+            const len = Math.sqrt(f.vx*f.vx + f.vy*f.vy) || 1;
+            const speed = 8 + Math.random() * 14;
+            f.vx = (f.vx / len) * speed;
+            f.vy = (f.vy / len) * speed;
+        });
+
+        // Flash overlay
+        const flash = document.createElement('div');
+        flash.id = 'shatter-flash';
+        document.body.appendChild(flash);
+        setTimeout(() => flash.classList.add('flash'), 10);
+
+        // Red burst radial from tap
+        sCtx.save();
+        const burst = sCtx.createRadialGradient(tapX, tapY, 0, tapX, tapY, Math.max(W, H));
+        burst.addColorStop(0, 'rgba(255,40,0,0.55)');
+        burst.addColorStop(0.3, 'rgba(200,10,0,0.2)');
+        burst.addColorStop(1, 'transparent');
+        sCtx.fillStyle = burst;
+        sCtx.fillRect(0, 0, W, H);
+        sCtx.restore();
+
+        // Animate fragments flying apart
+        let animFrame = 0;
+        function animShatter() {
+            animFrame++;
+            sCtx.clearRect(0, 0, W, H);
+
+            // Keep red burst fading
+            const burstAlpha = Math.max(0, 0.4 - animFrame * 0.02);
+            if (burstAlpha > 0) {
+                sCtx.save();
+                const b2 = sCtx.createRadialGradient(tapX, tapY, 0, tapX, tapY, Math.max(W, H));
+                b2.addColorStop(0, `rgba(255,40,0,${burstAlpha})`);
+                b2.addColorStop(1, 'transparent');
+                sCtx.fillStyle = b2; sCtx.fillRect(0, 0, W, H);
+                sCtx.restore();
+            }
+
+            let allGone = true;
+            fragments.forEach(f => {
+                f.tx += f.vx;
+                f.ty += f.vy;
+                f.vx *= 0.94;
+                f.vy *= 0.94;
+                f.angle += f.rot;
+                f.alpha -= 0.025;
+                if (f.alpha <= 0) return;
+                allGone = false;
+
+                sCtx.save();
+                sCtx.globalAlpha = f.alpha;
+                // Center of fragment
+                const cx = f.verts.reduce((s,p)=>s+p[0],0)/3;
+                const cy = f.verts.reduce((s,p)=>s+p[1],0)/3;
+                sCtx.translate(cx + f.tx, cy + f.ty);
+                sCtx.rotate(f.angle);
+                sCtx.translate(-cx, -cy);
+
+                sCtx.beginPath();
+                sCtx.moveTo(f.verts[0][0], f.verts[0][1]);
+                f.verts.slice(1).forEach(v => sCtx.lineTo(v[0], v[1]));
+                sCtx.closePath();
+
+                // Fill: dark with red tint
+                const shade = Math.floor(Math.random()*20);
+                sCtx.fillStyle = `rgb(${shade+30},${shade},${shade})`;
+                sCtx.fill();
+                // Red edge crack glow
+                sCtx.strokeStyle = `rgba(200,30,0,${f.alpha * 0.8})`;
+                sCtx.lineWidth = 1.5;
+                sCtx.stroke();
+                sCtx.restore();
+            });
+
+            if (!allGone && animFrame < 60) {
+                requestAnimationFrame(animShatter);
+            } else {
+                // Fragments gone — show glitch IMMEDIATELY then fade shatter screen
+                if (window.startGlitchNow) window.startGlitchNow();
+                screen.classList.add('fade-out');
+                setTimeout(() => { screen.style.display = 'none'; }, 750);
+            }
+        }
+        requestAnimationFrame(animShatter);
     }
 
-    // Sequence
-    // 0.0s — black silence
-    // 0.6s — line 1 types
-    // 1.8s — line 2 types
-    // 3.0s — PRAGYOTSAV 2K26 slams in
-    // 4.5s — fade out → glitch intro starts
+    // ── TAP / CLICK HANDLER ──
+    function onTap(e) {
+        if (shattered) return;
+        e.preventDefault();
+        let x, y;
+        if (e.touches && e.touches.length) {
+            x = e.touches[0].clientX;
+            y = e.touches[0].clientY;
+        } else {
+            x = e.clientX || window.innerWidth / 2;
+            y = e.clientY || window.innerHeight / 2;
+        }
+        doShatter(x, y);
+    }
 
-    setTimeout(() => {
-        typeText(cl1, 'YOU HAVE BEEN CHOSEN.', 55, () => {
-            setTimeout(() => {
-                typeText(cl2, 'PRAGYOTSAV 2K26 AWAITS.', 45, () => {
-                    setTimeout(() => {
-                        // Big title slam
-                        cl3.textContent = 'PRAGYOTSAV 2K26';
-                        // Screen shake
-                        screen.style.animation = 'chosenShake 0.35s ease';
-                        setTimeout(() => {
-                            // Fade out, then remove
-                            screen.classList.add('fade-out');
-                            setTimeout(() => {
-                                screen.style.display = 'none';
-                            }, 850);
-                        }, 1200);
-                    }, 300);
-                });
-            }, 600);
-        });
-    }, 500);
+    screen.addEventListener('touchstart', onTap, { passive: false });
+    screen.addEventListener('click',      onTap);
 })();
 
 /* ═══════════════════════════════════════════════════════════
