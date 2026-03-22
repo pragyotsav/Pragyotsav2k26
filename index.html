@@ -13,13 +13,14 @@
 </head>
 <body class="loading">
 
-    <!-- IDEA B: "YOU HAVE BEEN CHOSEN" CINEMATIC ENTRANCE -->
-    <div id="chosen-screen">
+    <!-- IDEA E: TAP TO SHATTER ENTRANCE -->
+    <div id="chosen-screen" id="shatter-screen">
         <canvas id="chosen-canvas"></canvas>
+        <canvas id="shatter-canvas"></canvas>
         <div id="chosen-lines">
-            <div class="chosen-line" id="cl1"></div>
-            <div class="chosen-line" id="cl2"></div>
-            <div class="chosen-line" id="cl3"></div>
+            <div class="chosen-line" id="cl1">TAP TO ENTER</div>
+            <div class="chosen-line" id="cl2">the upside down</div>
+            <div class="chosen-line pulse-line" id="cl3">▼</div>
         </div>
     </div>
 
@@ -79,8 +80,8 @@
             <a href="#about"   class="mob-link" onclick="closeMobileNav()">About</a>
             <a href="#map"     class="mob-link" onclick="closeMobileNav()">Event Map</a>
             <a href="#events"  class="mob-link" onclick="closeMobileNav()">Events</a>
-            <a href="#contact" class="mob-link" onclick="closeMobileNav()">Contact</a>
             <a href="#qr" class="mob-link" onclick="closeMobileNav()">QR Codes</a>
+            <a href="#contact" class="mob-link" onclick="closeMobileNav()">Contact</a>
         </nav>
         <div class="mob-nav-lights">
             <div class="bulb b-r"></div><div class="bulb b-y"></div><div class="bulb b-g"></div>
@@ -98,8 +99,8 @@
                 <a href="#about"   class="nav-link">About</a>
                 <a href="#events"  class="nav-link">Events</a>
                 <a href="#map"     class="nav-link">Map</a>
-                <a href="#contact" class="nav-link">Contact</a>
                 <a href="#qr" class="nav-link">QR Codes</a>
+                <a href="#contact" class="nav-link">Contact</a>
             </div>
             <div class="nav-lights">
                 <div class="bulb b-r"></div><div class="bulb b-y"></div><div class="bulb b-g"></div>
@@ -457,7 +458,7 @@
                     <!-- Email row (shared) -->
                     <div class="contact-email-row">
                         <span class="ci-label">Official Email</span>
-                        <a href="mailto:pragyotsav26@gmail.com" class="ci-email-val">pragyotsav26@gmail.com</a>
+                        <a href="mailto:techkrunch26@gmail.com" class="ci-email-val">techkrunch26@gmail.com</a>
                     </div>
 
                     <!-- Incharge cards -->
