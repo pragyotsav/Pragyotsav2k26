@@ -22,14 +22,14 @@ const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (!btn) return;
 
     const stTheme = new Audio('Stranger_Things.mp3');
-   stTheme.loop   = true;
-   stTheme.volume = 0.45;
-   stTheme.load(); // force browser to start downloading immediately
+stTheme.loop    = true;
+stTheme.volume  = 0.45;
+stTheme.preload = 'auto';
 
-   const amongUs = new Audio('among-us-ejected.mp3');
-   amongUs.loop   = false;
-   amongUs.volume = 0.75;
-   amongUs.load(); // force browser to start downloading immediately
+const amongUs = new Audio('Among us loading.mp3');
+amongUs.loop    = false;
+amongUs.volume  = 0.75;
+amongUs.preload = 'auto';
 
     // isMuted = false means sound is ON (user hasn't muted)
     let isMuted      = false;
