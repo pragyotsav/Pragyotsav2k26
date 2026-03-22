@@ -61,7 +61,7 @@ const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     setTimeout(() => {
         amongUs.currentTime = 0;
         amongUs.play().catch(() => {});
-    }, 1000);  // ← change this number
+    }, 990);
 
             // ST Theme starts looping — unless user already muted
             if (!isMuted) {
@@ -181,6 +181,10 @@ const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
             document.body.classList.remove('loading');
             setTimeout(() => { overlay.remove(); }, 600);
             startMorseTypewriter();
+            // Start all heavy canvases NOW (after loading is done)
+            if (window.__startSceneCanvas) window.__startSceneCanvas();
+            if (window.__startSporeCanvas) window.__startSporeCanvas();
+            if (window.__startNoiseCanvas) window.__startNoiseCanvas();
         }, dur);
     }
 })();
@@ -239,14 +243,20 @@ let W = 0, H = 0, scrollY = 0, scrollVel = 0, lastSY = 0;
 let sceneT = 0, lightningTimer = 180, lightningA = 0, demoPhase = 0;
 
 function resizeScene() {
-    W = sceneCanvas.width  = window.innerWidth;
-    H = sceneCanvas.height = window.innerHeight;
+    // Half resolution on mobile for performance — CSS scales it up
+    const pixelRatio = IS_MOBILE ? 0.6 : 1;
+    W = sceneCanvas.width  = Math.floor(window.innerWidth  * pixelRatio);
+    H = sceneCanvas.height = Math.floor(window.innerHeight * pixelRatio);
+    sceneCanvas.style.width  = window.innerWidth  + 'px';
+    sceneCanvas.style.height = window.innerHeight + 'px';
 }
 resizeScene();
 window.addEventListener('resize', resizeScene, { passive: true });
 
 function drawScene() {
     sceneT++;
+    // On mobile skip every other frame — halves GPU load with barely visible difference
+    if (IS_MOBILE && sceneT % 2 === 0) { requestAnimationFrame(drawScene); return; }
     sc.clearRect(0, 0, W, H);
     const maxS = Math.max(1, document.body.scrollHeight - window.innerHeight);
     const t = Math.min(scrollY / (maxS * 0.45), 1);
@@ -260,7 +270,8 @@ function drawScene() {
     drawRiders();
     requestAnimationFrame(drawScene);
 }
-drawScene();
+// Start scene canvas only after loading screens finish (saves mobile CPU during shatter)
+window.__startSceneCanvas = function() { drawScene(); };
 
 function drawSkyFX(t) {
     lightningTimer--;
@@ -452,7 +463,7 @@ function drawBeam(x,y) {
     sc2.width = sW; sc2.height = sH;
     let mouseX = sW/2, mouseY = sH/2;
     let gyroX = 0, gyroY = 0;
-    const COUNT = IS_MOBILE ? 45 : 80;
+    const COUNT = IS_MOBILE ? 28 : 75;
 
     if (IS_TOUCH) {
         window.addEventListener('deviceorientation', e => {
@@ -498,7 +509,8 @@ function drawBeam(x,y) {
         });
         requestAnimationFrame(anim);
     }
-    anim();
+    // Start spore animation only after loading done
+    window.__startSporeCanvas = function() { anim(); };
     window.addEventListener('resize',()=>{ sW=sc2.width=window.innerWidth; sH=sc2.height=window.innerHeight; },{passive:true});
 })();
 
@@ -512,9 +524,9 @@ function drawBeam(x,y) {
     function draw() {
         const img=nctx.createImageData(200,200),d=img.data;
         for (let i=0;i<d.length;i+=4){const v=Math.random()*255|0;d[i]=v;d[i+1]=v;d[i+2]=v;d[i+3]=255;}
-        nctx.putImageData(img,0,0); setTimeout(draw,90);
+        nctx.putImageData(img,0,0); setTimeout(draw, IS_MOBILE ? 180 : 90);
     }
-    draw();
+    window.__startNoiseCanvas = function() { draw(); };
     document.querySelectorAll('.event-card').forEach(c=>{
         c.addEventListener(IS_TOUCH?'touchstart':'mouseenter',()=>{
             nc.style.opacity='.07'; setTimeout(()=>{nc.style.opacity='.028';},340);
