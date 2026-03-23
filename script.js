@@ -9,11 +9,9 @@ const IS_MOBILE = window.innerWidth < 768 || IS_TOUCH;
 const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 /* ═══════════════════════════════════════════════════════════
-   SOUND SYSTEM — Simple & Reliable
-   ─ Among Us  : plays once when PRAGYOTSAV_2K26.exe appears
-   ─ ST Theme  : loops from that same moment, forever
-   ─ Button    : mute / unmute ST theme only
-   ─ Browser autoplay: audio context resumed on first interaction
+   SOUND SYSTEM — Mobile-First, Reliable
+   Works on iOS Safari, Android Chrome, Desktop
+   Key: AudioContext unlocked by the tap gesture itself
 ═══════════════════════════════════════════════════════════ */
 (function initSound() {
     const btn    = document.getElementById('sound-btn');
@@ -21,72 +19,84 @@ const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const offIco = document.getElementById('sound-off-icon');
     if (!btn) return;
 
+    // Create Audio elements — preload as much as possible
     const stTheme = new Audio('Stranger_Things.mp3');
     stTheme.loop    = true;
-    stTheme.volume  = 0.45;
+    stTheme.volume  = 0.40;
     stTheme.preload = 'auto';
+    stTheme.load();
 
-    const amongUs = new Audio('Among us loading.mp3');
+    const amongUs = new Audio('Among_us_loading.mp3');
     amongUs.loop    = false;
-    amongUs.volume  = 0.75;
+    amongUs.volume  = 0.80;
     amongUs.preload = 'auto';
+    amongUs.load();
 
-    // isMuted = false means sound is ON (user hasn't muted)
-    let isMuted      = false;
-    // Has the glitch screen fired yet?
-    let glitchFired  = false;
+    let isMuted     = false;
+    let glitchFired = false;
+    // AudioContext — used to reliably unlock audio on iOS
+    let actx = null;
 
-    /* updateBtn — keeps icon in sync with isMuted state */
+    function getAudioContext() {
+        if (!actx) {
+            actx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        return actx;
+    }
+
     function updateBtn() {
         if (isMuted) {
             btn.classList.remove('playing');
-            onIco.style.display  = '';     // show speaker icon  (sound OFF)
+            onIco.style.display  = '';
             offIco.style.display = 'none';
         } else {
             btn.classList.add('playing');
             onIco.style.display  = 'none';
-            offIco.style.display = '';     // show muted icon (sound ON, click to mute)
+            offIco.style.display = '';
         }
     }
 
-    /* ── playGlitchSound ──────────────────────────────────────
-       Called exactly once when PRAGYOTSAV_2K26.exe screen starts.
-       Tries to play immediately. If browser blocks it (autoplay
-       policy), it sets up a one-time gesture listener to retry.   */
+    /* ── Called on user's tap — unlocks audio on ALL browsers ── */
     window.playGlitchSound = function() {
         if (glitchFired) return;
         glitchFired = true;
 
-        function fireAudio() {
-            // Among Us always plays once — not affected by mute
-            amongUs.currentTime = 0;
-            amongUs.play().catch(() => {});
+        // Step 1: Create + resume AudioContext (unlocks iOS audio)
+        const ctx = getAudioContext();
+        const resume = ctx.state === 'suspended' ? ctx.resume() : Promise.resolve();
 
-            // ST Theme starts looping — unless user already muted
+        resume.then(() => {
+            // Step 2: Play Among Us loading sound
+            amongUs.currentTime = 0;
+            const p1 = amongUs.play();
+            if (p1) p1.catch(() => {});
+
+            // Step 3: Play ST theme if not muted
             if (!isMuted) {
                 stTheme.currentTime = 0;
-                stTheme.play().catch(() => {});
+                const p2 = stTheme.play();
+                if (p2) p2.catch(() => {});
             }
-        }
-
-        // Just call fireAudio directly — the tap that got us here
-        // IS already the user gesture, so audio will always work.
-        // No tryPlay/then/catch needed — that was causing double-fire.
-        fireAudio();
+        });
     };
 
-    /* ── Sound button: mute / unmute ST theme only ── */
+    /* ── Sound button ── */
     btn.addEventListener('click', () => {
+        // Button click is also a gesture — ensure ctx is unlocked
+        const ctx = getAudioContext();
+        if (ctx.state === 'suspended') ctx.resume();
+
         isMuted = !isMuted;
         if (isMuted) {
             stTheme.pause();
         } else {
-            stTheme.play().catch(() => {});
+            stTheme.currentTime = stTheme.currentTime || 0;
+            const p = stTheme.play();
+            if (p) p.catch(() => {});
         }
         updateBtn();
     });
 
-    // Start in unmuted visual state
     updateBtn();
 })();
 
@@ -763,50 +773,76 @@ function flickIn(el){
 
 /* ═══════════════════════════════════════════════════════════
    IDEA E — TAP TO SHATTER ENTRANCE
-   Black screen with pulsing "TAP TO ENTER THE UPSIDE DOWN"
-   Single tap → instant red flash → glitch fires
-   No animation, no lag, works first tap every time
+   DOUBLE TAP on mobile to enter (confirms intent, unlocks audio)
+   SINGLE CLICK on desktop
 ═══════════════════════════════════════════════════════════ */
 (function chosenEntrance() {
     const screen = document.getElementById('chosen-screen');
+    const cl1    = document.getElementById('cl1');
+    const cl2    = document.getElementById('cl2');
     if (!screen) return;
 
-    let tapped = false;
+    let entered    = false;
+    let tapCount   = 0;
+    let tapTimer   = null;
 
-    function onTap(e) {
-        if (tapped) return;
-        tapped = true;
+    function enter(e) {
+        if (entered) return;
+        entered = true;
+        if (e) { e.preventDefault(); e.stopImmediatePropagation(); }
 
-        // Prevent any double-fire from touchstart + click both triggering
-        e.preventDefault();
-        e.stopImmediatePropagation();
-
-        // 1. Trigger audio immediately — this IS the user gesture
+        // Audio — called on confirmed user gesture
         if (window.playGlitchSound) window.playGlitchSound();
 
-        // 2. Haptic pulse on mobile
-        if (navigator.vibrate) navigator.vibrate(80);
+        // Haptic
+        if (navigator.vibrate) navigator.vibrate([60, 40, 80]);
 
-        // 3. Quick red flash then fade screen — pure CSS, zero canvas work
-        screen.style.transition = 'background 0.08s ease, opacity 0.4s ease';
-        screen.style.background = 'rgba(200,20,0,0.35)';
+        // Flash red then fade
+        screen.style.transition = 'background 0.08s ease, opacity 0.45s ease';
+        screen.style.background = 'rgba(200,20,0,0.4)';
         setTimeout(() => {
             screen.style.background = '#000';
-            screen.style.opacity = '0';
+            screen.style.opacity    = '0';
         }, 80);
-
-        // 4. Show glitch after fade (400ms) — no animation delay
         setTimeout(() => {
             screen.style.display = 'none';
             if (window.startGlitchNow) window.startGlitchNow();
-        }, 420);
+        }, 450);
     }
 
-    // touchstart only — NOT click — avoids double-fire on mobile
-    // (touchstart fires first, we preventDefault which stops the click from firing)
-    screen.addEventListener('touchstart', onTap, { passive: false });
-    // click for desktop only
-    if (!IS_TOUCH) screen.addEventListener('click', onTap);
+    if (IS_TOUCH) {
+        // ── MOBILE: double tap ──
+        // First tap → show "TAP AGAIN TO CONFIRM"
+        // Second tap → enter
+        screen.addEventListener('touchstart', function(e) {
+            if (entered) return;
+            e.preventDefault();
+            tapCount++;
+
+            if (tapCount === 1) {
+                // First tap feedback
+                if (cl1) cl1.textContent = 'TAP AGAIN TO ENTER';
+                if (cl2) cl2.textContent = 'confirm your choice';
+                screen.style.background = 'rgba(150,10,0,0.15)';
+                setTimeout(() => { screen.style.background = ''; }, 200);
+                // Reset if second tap doesn't come within 3s
+                tapTimer = setTimeout(() => {
+                    tapCount = 0;
+                    if (cl1) cl1.textContent = 'TAP TO ENTER';
+                    if (cl2) cl2.textContent = 'the upside down';
+                }, 3000);
+            } else if (tapCount >= 2) {
+                clearTimeout(tapTimer);
+                enter(e);
+            }
+        }, { passive: false });
+
+    } else {
+        // ── DESKTOP: single click ──
+        screen.addEventListener('click', function(e) {
+            enter(e);
+        });
+    }
 })();
 
 /* ═══════════════════════════════════════════════════════════
