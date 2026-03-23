@@ -26,7 +26,7 @@ const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     stTheme.volume  = 0.45;
     stTheme.preload = 'auto';
 
-    const amongUs = new Audio('Among us loading.mp3');
+    const amongUs = new Audio('among-us-ejected.mp3');
     amongUs.loop    = false;
     amongUs.volume  = 0.75;
     amongUs.preload = 'auto';
