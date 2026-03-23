@@ -26,7 +26,7 @@ const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     stTheme.volume  = 0.45;
     stTheme.preload = 'auto';
 
-    const amongUs = new Audio('Among us loading.mp3');
+    const amongUs = new Audio('among-us-ejected.mp3');
     amongUs.loop    = false;
     amongUs.volume  = 0.75;
     amongUs.preload = 'auto';
@@ -69,27 +69,10 @@ const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
             }
         }
 
-        // Try immediately
-        const tryPlay = stTheme.play();
-        if (tryPlay !== undefined) {
-            tryPlay.then(() => {
-                // Autoplay allowed — also fire Among Us
-                stTheme.pause();
-                stTheme.currentTime = 0;
-                fireAudio();
-            }).catch(() => {
-                // Autoplay blocked — wait for first user gesture
-                function onFirstGesture() {
-                    document.removeEventListener('click',      onFirstGesture, true);
-                    document.removeEventListener('touchstart', onFirstGesture, true);
-                    fireAudio();
-                }
-                document.addEventListener('click',      onFirstGesture, { once: true, capture: true });
-                document.addEventListener('touchstart', onFirstGesture, { once: true, capture: true, passive: true });
-            });
-        } else {
-            fireAudio();
-        }
+        // Just call fireAudio directly — the tap that got us here
+        // IS already the user gesture, so audio will always work.
+        // No tryPlay/then/catch needed — that was causing double-fire.
+        fireAudio();
     };
 
     /* ── Sound button: mute / unmute ST theme only ── */
