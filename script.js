@@ -58,10 +58,9 @@ const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
         glitchFired = true;
 
         function fireAudio() {
-    setTimeout(() => {
-        amongUs.currentTime = 0;
-        amongUs.play().catch(() => {});
-    }, 990);
+            // Among Us always plays once — not affected by mute
+            amongUs.currentTime = 0;
+            amongUs.play().catch(() => {});
 
             // ST Theme starts looping — unless user already muted
             if (!isMuted) {
@@ -782,203 +781,49 @@ function flickIn(el){
 /* ═══════════════════════════════════════════════════════════
    IDEA E — TAP TO SHATTER ENTRANCE
    Black screen with pulsing "TAP TO ENTER THE UPSIDE DOWN"
-   On tap/click → shatter fragments burst from touch point
-   → white flash → fade out → glitch intro fires
+   Single tap → instant red flash → glitch fires
+   No animation, no lag, works first tap every time
 ═══════════════════════════════════════════════════════════ */
 (function chosenEntrance() {
     const screen = document.getElementById('chosen-screen');
-    const cc     = document.getElementById('chosen-canvas');    // bg noise
-    const sc     = document.getElementById('shatter-canvas');   // shatter fragments
-    if (!screen || !cc || !sc) return;
+    if (!screen) return;
 
-    let shattered = false;
+    let tapped = false;
 
-    // Resize both canvases
-    function resize() {
-        cc.width = sc.width = window.innerWidth;
-        cc.height = sc.height = window.innerHeight;
-    }
-    resize();
-    window.addEventListener('resize', resize, { passive: true });
+    function onTap(e) {
+        if (tapped) return;
+        tapped = true;
 
-    // ── BG: animated scanlines + subtle red glitch bars ──
-    const bgCtx = cc.getContext('2d');
-    let bgFrame = 0;
-    function drawBG() {
-        if (!screen.parentNode || shattered) return;
-        bgFrame++;
-        bgCtx.fillStyle = `rgba(0,0,0,${0.88 + Math.random()*.08})`;
-        bgCtx.fillRect(0, 0, cc.width, cc.height);
-        // red glitch bars
-        for (let i = 0; i < 3; i++) {
-            if (Math.random() > 0.78) {
-                bgCtx.fillStyle = `rgba(${140+Math.random()*60},0,0,${Math.random()*.1})`;
-                bgCtx.fillRect(0, Math.random()*cc.height, cc.width, Math.random()*2+1);
-            }
-        }
-        // scan lines
-        for (let y = 0; y < cc.height; y += 4) {
-            bgCtx.fillStyle = 'rgba(0,0,0,0.07)';
-            bgCtx.fillRect(0, y, cc.width, 1);
-        }
-        requestAnimationFrame(drawBG);
-    }
-    drawBG();
+        // Prevent any double-fire from touchstart + click both triggering
+        e.preventDefault();
+        e.stopImmediatePropagation();
 
-    // ── SHATTER: generate polygon fragments from tap point ──
-    function doShatter(tapX, tapY) {
-        if (shattered) return;
-        shattered = true;
-
-        // Trigger audio unlock + sounds
-        document.dispatchEvent(new MouseEvent('click'));
+        // 1. Trigger audio immediately — this IS the user gesture
         if (window.playGlitchSound) window.playGlitchSound();
 
-        // Haptic on mobile
-        if (navigator.vibrate) navigator.vibrate([40, 30, 80]);
+        // 2. Haptic pulse on mobile
+        if (navigator.vibrate) navigator.vibrate(80);
 
-        const sCtx = sc.getContext('2d');
-        const W = sc.width, H = sc.height;
+        // 3. Quick red flash then fade screen — pure CSS, zero canvas work
+        screen.style.transition = 'background 0.08s ease, opacity 0.4s ease';
+        screen.style.background = 'rgba(200,20,0,0.35)';
+        setTimeout(() => {
+            screen.style.background = '#000';
+            screen.style.opacity = '0';
+        }, 80);
 
-        // Generate ~28 irregular polygon fragments
-        const COUNT  = IS_MOBILE ? 20 : 28;
-        const points = [[tapX, tapY]]; // seed from tap
-        // Add random points around screen
-        for (let i = 0; i < COUNT; i++) {
-            points.push([
-                Math.random() * W,
-                Math.random() * H
-            ]);
-        }
-        // Always include corners
-        points.push([0,0],[W,0],[W,H],[0,H],[tapX,0],[tapX,H],[0,tapY],[W,tapY]);
-
-        // Simple Delaunay-like triangulation: connect tap to random pairs
-        const fragments = [];
-        for (let i = 1; i < points.length - 1; i++) {
-            const p1 = points[i];
-            const p2 = points[(i + 1) % (points.length - 1) + 1] || points[1];
-            fragments.push({
-                verts: [
-                    [tapX, tapY],
-                    p1,
-                    p2
-                ],
-                // velocity — fly away from tap point
-                vx: (p1[0] + p2[0]) / 2 - tapX,
-                vy: (p1[1] + p2[1]) / 2 - tapY,
-                rot: (Math.random() - 0.5) * 0.25,
-                alpha: 1,
-                tx: 0, ty: 0, angle: 0
-            });
-        }
-
-        // Normalize velocities
-        fragments.forEach(f => {
-            const len = Math.sqrt(f.vx*f.vx + f.vy*f.vy) || 1;
-            const speed = 8 + Math.random() * 14;
-            f.vx = (f.vx / len) * speed;
-            f.vy = (f.vy / len) * speed;
-        });
-
-        // Flash overlay
-        const flash = document.createElement('div');
-        flash.id = 'shatter-flash';
-        document.body.appendChild(flash);
-        setTimeout(() => flash.classList.add('flash'), 10);
-
-        // Red burst radial from tap
-        sCtx.save();
-        const burst = sCtx.createRadialGradient(tapX, tapY, 0, tapX, tapY, Math.max(W, H));
-        burst.addColorStop(0, 'rgba(255,40,0,0.55)');
-        burst.addColorStop(0.3, 'rgba(200,10,0,0.2)');
-        burst.addColorStop(1, 'transparent');
-        sCtx.fillStyle = burst;
-        sCtx.fillRect(0, 0, W, H);
-        sCtx.restore();
-
-        // Animate fragments flying apart
-        let animFrame = 0;
-        function animShatter() {
-            animFrame++;
-            sCtx.clearRect(0, 0, W, H);
-
-            // Keep red burst fading
-            const burstAlpha = Math.max(0, 0.4 - animFrame * 0.02);
-            if (burstAlpha > 0) {
-                sCtx.save();
-                const b2 = sCtx.createRadialGradient(tapX, tapY, 0, tapX, tapY, Math.max(W, H));
-                b2.addColorStop(0, `rgba(255,40,0,${burstAlpha})`);
-                b2.addColorStop(1, 'transparent');
-                sCtx.fillStyle = b2; sCtx.fillRect(0, 0, W, H);
-                sCtx.restore();
-            }
-
-            let allGone = true;
-            fragments.forEach(f => {
-                f.tx += f.vx;
-                f.ty += f.vy;
-                f.vx *= 0.94;
-                f.vy *= 0.94;
-                f.angle += f.rot;
-                f.alpha -= 0.025;
-                if (f.alpha <= 0) return;
-                allGone = false;
-
-                sCtx.save();
-                sCtx.globalAlpha = f.alpha;
-                // Center of fragment
-                const cx = f.verts.reduce((s,p)=>s+p[0],0)/3;
-                const cy = f.verts.reduce((s,p)=>s+p[1],0)/3;
-                sCtx.translate(cx + f.tx, cy + f.ty);
-                sCtx.rotate(f.angle);
-                sCtx.translate(-cx, -cy);
-
-                sCtx.beginPath();
-                sCtx.moveTo(f.verts[0][0], f.verts[0][1]);
-                f.verts.slice(1).forEach(v => sCtx.lineTo(v[0], v[1]));
-                sCtx.closePath();
-
-                // Fill: dark with red tint
-                const shade = Math.floor(Math.random()*20);
-                sCtx.fillStyle = `rgb(${shade+30},${shade},${shade})`;
-                sCtx.fill();
-                // Red edge crack glow
-                sCtx.strokeStyle = `rgba(200,30,0,${f.alpha * 0.8})`;
-                sCtx.lineWidth = 1.5;
-                sCtx.stroke();
-                sCtx.restore();
-            });
-
-            if (!allGone && animFrame < 60) {
-                requestAnimationFrame(animShatter);
-            } else {
-                // Fragments gone — show glitch IMMEDIATELY then fade shatter screen
-                if (window.startGlitchNow) window.startGlitchNow();
-                screen.classList.add('fade-out');
-                setTimeout(() => { screen.style.display = 'none'; }, 750);
-            }
-        }
-        requestAnimationFrame(animShatter);
+        // 4. Show glitch after fade (400ms) — no animation delay
+        setTimeout(() => {
+            screen.style.display = 'none';
+            if (window.startGlitchNow) window.startGlitchNow();
+        }, 420);
     }
 
-    // ── TAP / CLICK HANDLER ──
-    function onTap(e) {
-        if (shattered) return;
-        e.preventDefault();
-        let x, y;
-        if (e.touches && e.touches.length) {
-            x = e.touches[0].clientX;
-            y = e.touches[0].clientY;
-        } else {
-            x = e.clientX || window.innerWidth / 2;
-            y = e.clientY || window.innerHeight / 2;
-        }
-        doShatter(x, y);
-    }
-
+    // touchstart only — NOT click — avoids double-fire on mobile
+    // (touchstart fires first, we preventDefault which stops the click from firing)
     screen.addEventListener('touchstart', onTap, { passive: false });
-    screen.addEventListener('click',      onTap);
+    // click for desktop only
+    if (!IS_TOUCH) screen.addEventListener('click', onTap);
 })();
 
 /* ═══════════════════════════════════════════════════════════
